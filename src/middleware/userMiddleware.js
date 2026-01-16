@@ -1,46 +1,50 @@
 const jwt = require("jsonwebtoken");
 const User = require("../models/user");
-const redisClient = require("../config/redis")
+const redisClient = require("../config/redis");
 
-const userMiddleware = async (req,res,next)=>{
-
-    try{
+const userMiddleware = async (req, res, next) => {
+    try {
+        const { token } = req.cookies;
         
-        const {token} = req.cookies;
-        if(!token)
-            throw new Error("Token is not persent");
+        if (!token) {
+            return res.status(401).json({ message: "Authentication required" });
+        }
 
-        const payload = jwt.verify(token,process.env.JWT_KEY);
+        let payload;
+        try {
+            payload = jwt.verify(token, process.env.JWT_KEY);
+        } catch (jwtErr) {
+            if (jwtErr.name === 'TokenExpiredError') {
+                return res.status(401).json({ message: "Token expired" });
+            }
+            return res.status(401).json({ message: "Invalid token" });
+        }
 
-        const {_id} = payload;
+        const { _id } = payload;
 
-        if(!_id){
-            throw new Error("Invalid token");
+        if (!_id) {
+            return res.status(401).json({ message: "Invalid token payload" });
         }
 
         const result = await User.findById(_id);
 
-        if(!result){
-            throw new Error("User Doesn't Exist");
+        if (!result) {
+            return res.status(401).json({ message: "User not found" });
         }
 
-        // Redis ke blockList mein persent toh nahi hai
+        // Check Redis blocklist
+        const isBlocked = await redisClient.exists(`token:${token}`);
 
-        const IsBlocked = await redisClient.exists(`token:${token}`);
-
-        if(IsBlocked)
-            throw new Error("Invalid Token");
+        if (isBlocked) {
+            return res.status(401).json({ message: "Token has been revoked" });
+        }
 
         req.result = result;
-
-
         next();
+    } catch (err) {
+        console.error("Middleware Error:", err);
+        res.status(401).json({ message: "Authentication failed" });
     }
-    catch(err){
-        res.status(401).send("Error: "+ err.message)
-    }
-
-}
-
+};
 
 module.exports = userMiddleware;
