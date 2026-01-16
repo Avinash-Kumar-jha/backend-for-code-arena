@@ -12,8 +12,21 @@ const videoRouter = require("./routes/videoCreator");
 const cors = require('cors')
 
 // ✅ CORS MUST come BEFORE any routes
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://subtle-selkie-67c3a2.netlify.app"
+];
+
 app.use(cors({
-  origin: true, // 👈 allow all origins TEMPORARILY
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
   credentials: true
 }));
 
